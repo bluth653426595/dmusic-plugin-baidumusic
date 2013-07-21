@@ -21,9 +21,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import gobject
+import copy
+import time
 
 from dtk.ui.treeview import TreeView
-
+from dtk.ui.threads import post_gui
 
 from widget.ui_utils import draw_alpha_mask
 from widget.song_item import SongItem
@@ -54,6 +56,8 @@ class MusicView(TreeView):
         
         self.db_file = get_config_file("baidumusic.db")
         self.load()
+        
+        self.request_thread_id = 0
         
     def on_event_add_songs(self, obj, data):    
         self.add_songs(data)
@@ -86,9 +90,30 @@ class MusicView(TreeView):
         self.emit("begin-add-items")
     
     def request_song(self, song, play=True):        
-        song = request_songinfo(song)
+        if self.adjust_uri_expired(song):
+            self.request_thread_id += 1
+            thread_id = copy.deepcopy(self.request_thread_id)
+            utils.ThreadFetch(
+                fetch_funcs=(request_songinfo, (song,)),
+                success_funcs=(self.render_play_song, (play, thread_id))
+                ).start()
+        else:    
+            self.play_song(song, play=True)
         
-        if not song: return None
+    def adjust_uri_expired(self, song):    
+        expire_time = song.get("uri_expire_time", None)
+        duration = song.get("#duration", None)        
+        fetch_time = song.get("fetch_time", None)
+        if not expire_time or not duration or not fetch_time or not song.get("uri", None):
+            return True
+        now = time.time()
+        past_time = now - fetch_time
+        if past_time > (expire_time - duration) / 1000 :
+            return True
+        return False
+            
+    def play_song(self, song, play=False):    
+        if not song: return None        
         
         # update song info
         self.update_songitem(song)
@@ -108,7 +133,15 @@ class MusicView(TreeView):
             self.set_current_source()
             
         return song    
+    
+    @post_gui
+    def render_play_song(self, song, play, thread_id):
+        if thread_id != self.request_thread_id:
+            return
         
+        song["fetch_time"] = time.time()
+        self.play_song(song, play)
+    
     def get_songs(self):    
         songs = []
         self.update_item_index()
@@ -166,7 +199,7 @@ class MusicView(TreeView):
         else:        
             highlight_item = self.items[0]
             
-        return self.request_song(highlight_item.get_song(), play=False)
+        self.request_song(highlight_item.get_song(), play=True)
     
     def get_previous_song(self):
         if len(self.items) <= 0:
@@ -182,7 +215,7 @@ class MusicView(TreeView):
         else:        
             highlight_item = self.items[0]
             
-        return self.request_song(highlight_item.get_song(), play=False)
+        self.request_song(highlight_item.get_song(), play=True)
     
     def save(self):
         objs = [ song.get_dict() for song in self.get_songs() ]

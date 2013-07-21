@@ -20,6 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import time
 from netlib import Curl
 from utils import parser_json
 from song import Song
@@ -30,9 +31,11 @@ TAGS_MUSIC_KEYS = {
     "song_artist" : "artist",
     "album_title" : "album",
     "album_pic_small" : "album_url",
+    "lyric_url" : "lyric_url",
     "url" : "uri",
     "kbps" : "#rate",
     "duration" : "#duration",
+    "url_expire_time" : "uri_expire_time"
 }
 
 public_curl = Curl()
@@ -71,13 +74,19 @@ def parse_to_dsong(ret, song=None):
             if getattr(bsong, has_key)(btag):
                 song[tag] = bsong[btag]
             if getattr(bfile, has_key)(btag):    
-                song[tag] = bfile[btag]
+                if btag == "duration":
+                    song[tag] = bfile[btag] * 1000
+                else:    
+                    song[tag] = bfile[btag]
+                    
     except Exception, e:            
         import sys
         import traceback
         traceback.print_exc(file=sys.stdout)
         return None
     else:
+        song["fetch_time"] = time.time()
+        
         if is_dummy:
             new_song = Song()
             new_song.init_from_dict(song, cmp_key="sid")

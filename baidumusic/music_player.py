@@ -87,5 +87,5 @@ class PlayerInterface(object):
 class TTPDownload(object):        
     
     def init(self, down_type, dummy_songs):
-        pass
+        print "Don't support"
         # print MusicPlayer.parse_dummy_songs(dummy_songs)
